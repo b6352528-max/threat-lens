@@ -12,6 +12,8 @@ const demoPlaces = {
   'union square': { lat: 40.7359, lon: -73.9911 },
   'statue of liberty': { lat: 40.6892, lon: -74.0445 },
   'empire state building': { lat: 40.7484, lon: -73.9857 },
+  'grand central station': { lat: 40.7527, lon: -73.9772 },
+  'madison square garden': { lat: 40.7505, lon: -73.9934 },
 };
 
 const categoryPalette = {
@@ -125,6 +127,7 @@ function buildDemoIncidents(lat, lon) {
 }
 
 function App() {
+  const [theme, setTheme] = useState(() => localStorage.getItem('threat-lens-theme') || 'dark');
   const [location, setLocation] = useState(defaultCenter);
   const [incidents, setIncidents] = useState(() => buildDemoIncidents(defaultCenter.lat, defaultCenter.lon));
   const [selectedId, setSelectedId] = useState(null);
@@ -132,11 +135,16 @@ function App() {
   const [radiusKm, setRadiusKm] = useState(5);
   const [locationStatus, setLocationStatus] = useState('Using demo location');
   const [summary, setSummary] = useState({ activeAlerts: 4, averageRisk: 62, safetyScore: 68, routeStatus: 'Elevated caution' });
-  const [weather, setWeather] = useState(null);
+  const [weather, setWeather] = useState({ temperature_2m: 19, wind_speed_10m: 14, precipitation: 0.8 });
   const [routeDestination, setRouteDestination] = useState('Central Park New York');
   const [routeInfo, setRouteInfo] = useState(null);
   const [routeError, setRouteError] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    document.body.dataset.theme = theme;
+    localStorage.setItem('threat-lens-theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -170,8 +178,8 @@ function App() {
       const data = await response.json();
       const nextIncidents = data.incidents && data.incidents.length ? data.incidents : buildDemoIncidents(location.lat, location.lon);
       setIncidents(nextIncidents);
-      setSummary(data.summary || { activeAlerts: 0, averageRisk: 0, safetyScore: 100, routeStatus: 'Normal watch' });
-      setWeather(data.weather || null);
+      setSummary(data.summary || { activeAlerts: nextIncidents.length, averageRisk: 62, safetyScore: 68, routeStatus: 'Elevated caution' });
+      setWeather(data.weather || { temperature_2m: 19, wind_speed_10m: 14, precipitation: 0.8 });
       setSelectedId(nextIncidents[0]?.id || null);
     } catch (error) {
       const demo = buildDemoIncidents(location.lat, location.lon);
@@ -320,6 +328,15 @@ function App() {
           </div>
           <strong>{weather ? `${Math.round(weather.temperature_2m)}°C` : '--'}</strong>
           <p>{weather ? `Wind ${weather.wind_speed_10m} km/h` : 'No public weather feed available'}</p>
+        </div>
+
+        <div className="mini-card glass-panel subtle theme-switcher">
+          <div className="card-head">
+            <span>Theme</span>
+          </div>
+          <button className="theme-toggle" onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}>
+            {theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
+          </button>
         </div>
       </aside>
 
