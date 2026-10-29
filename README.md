@@ -1,29 +1,39 @@
-# Local Threat Lens
+# Threat Lens
 
-Local Threat Lens is a local-first public safety dashboard built to help a person understand nearby risk conditions using public, open-source data. It is designed for browsers running on localhost and works without a private backend or restricted APIs.
+Threat Lens is a local-first safety intelligence dashboard that turns public information into a clear view of what is happening around you.
 
-## What the app does
+It blends live location awareness, weather context, nearby public signals, and route risk analysis into one calm, modern interface designed for quick understanding at a glance.
 
-The app combines a modern React interface with an Express backend to:
+## What it does
 
-- detect the user’s location via browser geolocation when permission is granted
-- query public weather data from Open-Meteo
-- query nearby public map features from OpenStreetMap Overpass API
-- estimate risk around the user using distance, severity, recency, and public activity
-- display risk incidents on a map and in a signal list
-- filter alerts by category
-- estimate route safety for a destination before travel
+Threat Lens helps people answer simple but important questions in real time:
 
-## Features
+- What is happening around my current location?
+- Is the area safer or riskier than usual?
+- How does weather or local infrastructure affect my route?
+- What public signals should I keep an eye on nearby?
 
-- Live geolocation-aware dashboard
-- Nearby risk and safety score overview
-- Weather card with local conditions
-- Interactive Leaflet map with markers and radius circle
-- Severity-based alert detection and scoring
-- Filterable incident list
-- Route planning and risk estimation for destinations
-- Public-data-only architecture suitable for localhost demo use
+## Experience
+
+The app presents a premium urban dashboard feel with:
+
+- live geolocation tracking
+- public weather overlays
+- nearby incident and risk cards
+- interactive map layers
+- destination route assessment
+- filterable safety signals
+- polished glassmorphism UI built for clarity and focus
+
+## Built for public-first situational awareness
+
+Threat Lens is designed to work with open, public, and local data sources instead of private or restricted feeds. It is a strong prototype for:
+
+- local risk monitoring
+- route awareness
+- neighborhood intelligence
+- public safety demos
+- civic and emergency planning tools
 
 ## Tech stack
 
@@ -34,32 +44,19 @@ The app combines a modern React interface with an Express backend to:
 - OpenStreetMap
 - Open-Meteo
 
-## Local setup
-
-From the project root:
+## Run locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-Then open:
+Open the app in your browser:
 
 ```text
 http://localhost:3000
 ```
 
-The app runs with:
-- frontend on port 3000
-- backend API on port 4000
+## Project vision
 
-## API endpoints
-
-- `GET /api/health`
-- `GET /api/threats?lat=&lon=&radiusKm=`
-- `GET /api/places?q=`
-- `GET /api/route?startLat=&startLon=&endLat=&endLon=`
-
-## Project goal
-
-The goal of Local Threat Lens is to present a polished local safety dashboard that exposes nearby risk conditions in a simple, understandable way using only public data.
+Threat Lens is built as a modern situational awareness product for the everyday user: a smarter way to understand the conditions around them, before stepping into an uncertain environment.
