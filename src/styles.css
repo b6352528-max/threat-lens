@@ -47,6 +47,15 @@ body::before {
   background: linear-gradient(120deg, rgba(96,165,250,.08), transparent 36%, rgba(34,211,238,.06));
 }
 
+button {
+  transition: all 0.2s ease;
+}
+
+button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
 .app-shell {
   position: relative;
   display: grid;
@@ -134,7 +143,6 @@ body::before {
   text-align: left;
   padding: 12px 14px;
   cursor: pointer;
-  transition: all 0.2s ease;
 }
 
 .nav-item:hover,
@@ -212,7 +220,6 @@ body::before {
   border-radius: 12px;
   padding: 10px 14px;
   cursor: pointer;
-  transition: all .18s ease;
 }
 
 .action-btn:hover,
@@ -424,7 +431,6 @@ body::before {
   padding: 7px 10px;
   border-radius: 999px;
   cursor: pointer;
-  transition: all .2s ease;
 }
 
 .pill.active {
@@ -452,7 +458,6 @@ body::before {
   gap: 12px;
   text-align: left;
   cursor: pointer;
-  transition: all .2s ease;
 }
 
 .incident-item.selected {

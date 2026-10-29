@@ -30,7 +30,16 @@ function haversineKm(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-function buildFallbackIncidents(lat, lon, weather, signals) {
+function normalizeCategory(value) {
+  if (!value) return 'Public gathering';
+  const normalized = String(value).trim();
+  if (/weather/i.test(normalized)) return 'Weather';
+  if (/transport|transit|station|road/i.test(normalized)) return 'Transport';
+  if (/infrastructure|hospital|utility|civic/i.test(normalized)) return 'Infrastructure';
+  return 'Public gathering';
+}
+
+function buildFallbackIncidents(lat, lon, weather, signals = []) {
   const incidents = [
     {
       id: 'weather-alert',
@@ -61,20 +70,21 @@ function buildFallbackIncidents(lat, lon, weather, signals) {
       source: 'Public map data',
       timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
       position: { lat: lat + 0.012, lon: lon + 0.006 },
-    }
+    },
   ];
 
-  if (weather && weather.precipitation > 0.5) {
+  if (weather && Number(weather.precipitation || 0) > 0.5) {
     incidents[0].severity = 'critical';
     incidents[0].description = 'Heavy precipitation and poor visibility are increasing local risk for nearby movement.';
   }
 
   if (signals && signals.length) {
-    signals.slice(0, 3).forEach((signal, index) => {
+    signals.slice(0, 4).forEach((signal, index) => {
+      const signalCategory = normalizeCategory(signal.category || signal.type || signal.amenity || 'Public gathering');
       incidents.push({
         id: `signal-${signal.id || index}`,
-        title: `${signal.amenity || signal.type || 'Public place'} signal`,
-        category: signal.category || 'Public gathering',
+        title: `${signal.name || signal.type || 'Public place'} signal`,
+        category: signalCategory,
         severity: index === 0 ? 'medium' : 'low',
         description: `Public map data suggests elevated activity around ${signal.name || 'a local feature'}.`,
         source: 'OpenStreetMap public data',
@@ -109,27 +119,32 @@ app.get('/api/threats', async (request, response) => {
   const radiusKm = clamp(Number(request.query.radiusKm ?? 5), 1, 25);
 
   try {
-    const [weather, signals] = await Promise.all([
+    const results = await Promise.allSettled([
       fetchWeather(lat, lon),
-      fetchOverpassSignals(lat, lon, radiusKm)
+      fetchOverpassSignals(lat, lon, radiusKm),
     ]);
+
+    const weather = results[0].status === 'fulfilled' ? results[0].value : null;
+    const signals = results[1].status === 'fulfilled' ? results[1].value : [];
 
     const incidents = buildFallbackIncidents(lat, lon, weather, signals)
       .map((incident) => calculateRisk(incident, { lat, lon }))
-      .filter((incident) => incident.distanceKm <= radiusKm + 2)
-      .sort((a, b) => b.riskScore - a.riskScore);
+      .filter((incident) => Number(incident.distanceKm) <= radiusKm + 2)
+      .sort((a, b) => b.riskScore - a.riskScore || a.distanceKm - b.distanceKm);
+
+    const averageRisk = incidents.length
+      ? Math.round(incidents.reduce((sum, item) => sum + item.riskScore, 0) / incidents.length)
+      : 0;
 
     const summary = {
       activeAlerts: incidents.length,
-      averageRisk: incidents.length
-        ? Math.round(incidents.reduce((sum, item) => sum + item.riskScore, 0) / incidents.length)
-        : 0,
-      safetyScore: clamp(100 - (incidents.length ? Math.round(incidents.reduce((sum, item) => sum + item.riskScore, 0) / incidents.length) : 0), 12, 98),
+      averageRisk,
+      safetyScore: clamp(100 - averageRisk, 12, 98),
       routeStatus: incidents.length && incidents[0].riskScore > 60 ? 'Elevated caution' : 'Normal watch',
       weather: weather ? {
         temperature: weather.temperature_2m,
         windSpeed: weather.wind_speed_10m,
-        precipitation: weather.precipitation
+        precipitation: weather.precipitation,
       } : null,
     };
 
@@ -180,3 +195,5 @@ app.get('/api/route', async (request, response) => {
 app.listen(PORT, () => {
   console.log(`Local Threat Lens API running on http://localhost:${PORT}`);
 });
+
+export default app;

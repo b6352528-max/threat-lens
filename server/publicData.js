@@ -14,7 +14,12 @@ export async function fetchWeather(lat, lon) {
     timezone: 'auto',
   });
 
-  const response = await fetch(`${WEATHER_URL}?${params.toString()}`);
+  const response = await fetch(`${WEATHER_URL}?${params.toString()}`, {
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
   if (!response.ok) {
     throw new Error('Weather API request failed');
   }
@@ -31,13 +36,17 @@ export async function fetchOverpassSignals(lat, lon, radiusKm = 5) {
       node(around:${radiusMeters},${lat},${lon})["amenity"];
       way(around:${radiusMeters},${lat},${lon})["amenity"];
       node(around:${radiusMeters},${lat},${lon})["leisure"];
+      way(around:${radiusMeters},${lat},${lon})["leisure"];
     );
     out center 20;
   `;
 
   const response = await fetch(OVERPASS_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      Accept: 'application/json',
+    },
     body: `data=${encodeURIComponent(query)}`,
   });
 
@@ -82,6 +91,7 @@ export async function geocodePlace(query) {
     headers: {
       'Accept-Language': 'en',
       'User-Agent': 'LocalThreatLens/1.0',
+      Accept: 'application/json',
     },
   });
 

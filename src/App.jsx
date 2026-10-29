@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { MapContainer, Marker, TileLayer, Popup, Circle } from 'react-leaflet';
 import L from 'leaflet';
 
-const API_BASE = 'http://localhost:4000';
+const API_BASE = import.meta.env.VITE_API_BASE || '';
 const defaultCenter = { lat: 40.7128, lon: -74.006 };
 
 function createMarkerIcon(color) {
@@ -30,6 +30,14 @@ function getSeverityColor(level) {
   return '#34d399';
 }
 
+function normalizeCategoryKey(category = '') {
+  return String(category)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 function App() {
   const [location, setLocation] = useState(defaultCenter);
   const [incidents, setIncidents] = useState([]);
@@ -42,6 +50,7 @@ function App() {
   const [routeDestination, setRouteDestination] = useState('Central Park New York');
   const [routeInfo, setRouteInfo] = useState(null);
   const [routeError, setRouteError] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -64,26 +73,36 @@ function App() {
     );
   }, []);
 
-  useEffect(() => {
-    const fetchThreats = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/threats?lat=${location.lat}&lon=${location.lon}&radiusKm=${radiusKm}`);
-        const data = await response.json();
-        setIncidents(data.incidents || []);
-        setSummary(data.summary || { activeAlerts: 0, averageRisk: 0, safetyScore: 100, routeStatus: 'Normal watch' });
-        setWeather(data.weather || null);
-        setSelectedId((data.incidents || [])[0]?.id || null);
-      } catch (error) {
-        console.error('Failed to fetch threats', error);
-      }
-    };
+  const refreshThreats = async () => {
+    setIsRefreshing(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/threats?lat=${location.lat}&lon=${location.lon}&radiusKm=${radiusKm}`);
+      const data = await response.json();
+      const nextIncidents = data.incidents || [];
+      setIncidents(nextIncidents);
+      setSummary(data.summary || { activeAlerts: 0, averageRisk: 0, safetyScore: 100, routeStatus: 'Normal watch' });
+      setWeather(data.weather || null);
+      setSelectedId(nextIncidents[0]?.id || null);
+    } catch (error) {
+      console.error('Failed to fetch threats', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
-    fetchThreats();
+  useEffect(() => {
+    refreshThreats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location, radiusKm]);
+
+  const categoryOptions = useMemo(() => {
+    const values = new Set(incidents.map((incident) => normalizeCategoryKey(incident.category)));
+    return ['all', ...Array.from(values)];
+  }, [incidents]);
 
   const visibleIncidents = useMemo(() => {
     if (filter === 'all') return incidents;
-    return incidents.filter((incident) => incident.category.toLowerCase() === filter);
+    return incidents.filter((incident) => normalizeCategoryKey(incident.category) === filter);
   }, [incidents, filter]);
 
   const selectedIncident = useMemo(
@@ -92,6 +111,11 @@ function App() {
   );
 
   const handleRoutePlan = async () => {
+    if (!routeDestination.trim()) {
+      setRouteError('Please enter a destination');
+      return;
+    }
+
     try {
       const placeResponse = await fetch(`${API_BASE}/api/places?q=${encodeURIComponent(routeDestination)}`);
       const placeData = await placeResponse.json();
@@ -111,6 +135,14 @@ function App() {
     } catch (error) {
       setRouteError('Route planning is unavailable right now');
     }
+  };
+
+  const renderCategoryLabel = (value) => {
+    if (value === 'all') return 'All';
+    return value
+      .split('-')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
   };
 
   return (
@@ -138,7 +170,9 @@ function App() {
             <span className="status-dot" />
           </div>
           <strong>{locationStatus}</strong>
-          <p>{location.lat.toFixed(4)}, {location.lon.toFixed(4)}</p>
+          <p>
+            {location.lat.toFixed(4)}, {location.lon.toFixed(4)}
+          </p>
         </div>
 
         <div className="mini-card glass-panel subtle">
@@ -160,7 +194,9 @@ function App() {
 
           <div className="toolbar">
             <div className="chip chip-amber">Public data only</div>
-            <button className="action-btn">Refresh</button>
+            <button className="action-btn" onClick={refreshThreats} disabled={isRefreshing}>
+              {isRefreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
           </div>
         </header>
 
@@ -331,13 +367,13 @@ function App() {
                   <h3>Signal list</h3>
                 </div>
                 <div className="filter-pills">
-                  {['all', 'weather', 'transport', 'infrastructure', 'public gathering'].map((item) => (
+                  {categoryOptions.map((item) => (
                     <button
                       key={item}
                       className={filter === item ? 'pill active' : 'pill'}
                       onClick={() => setFilter(item)}
                     >
-                      {item === 'all' ? 'All' : item}
+                      {renderCategoryLabel(item)}
                     </button>
                   ))}
                 </div>
