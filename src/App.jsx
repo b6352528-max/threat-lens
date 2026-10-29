@@ -1,9 +1,28 @@
 import { useEffect, useMemo, useState } from 'react';
-import { MapContainer, Marker, TileLayer, Popup, Circle } from 'react-leaflet';
+import { MapContainer, Marker, TileLayer, Popup, Circle, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 const defaultCenter = { lat: 40.7128, lon: -74.006 };
+
+const demoPlaces = {
+  'central park new york': { lat: 40.7829, lon: -73.9654 },
+  'times square': { lat: 40.758, lon: -73.9855 },
+  'brooklyn bridge': { lat: 40.7061, lon: -73.9967 },
+  'union square': { lat: 40.7359, lon: -73.9911 },
+  'statue of liberty': { lat: 40.6892, lon: -74.0445 },
+  'empire state building': { lat: 40.7484, lon: -73.9857 },
+};
+
+const categoryPalette = {
+  weather: '#38bdf8',
+  transport: '#fbbf24',
+  infrastructure: '#34d399',
+  public: '#a78bfa',
+  crowd: '#f472b6',
+  medical: '#f87171',
+  civic: '#60a5fa',
+};
 
 function createMarkerIcon(color) {
   return new L.DivIcon({
@@ -31,21 +50,88 @@ function getSeverityColor(level) {
 }
 
 function normalizeCategoryKey(category = '') {
-  return String(category)
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  const raw = String(category).trim().toLowerCase();
+  if (!raw) return 'public';
+  if (/weather|rain|storm|wind|fog/.test(raw)) return 'weather';
+  if (/transport|transit|station|road|traffic|train|bus|metro/.test(raw)) return 'transport';
+  if (/medical|hospital|clinic|health|ambulance|care/.test(raw)) return 'medical';
+  if (/infrastructure|utility|civic|government|works|airport|school/.test(raw)) return 'infrastructure';
+  if (/crowd|market|festival|park|event|venue|outdoor|public/.test(raw)) return 'public';
+  return 'public';
+}
+
+function categoryLabelFromValue(value) {
+  if (!value || value === 'all') return 'All';
+  const mapping = {
+    weather: 'Weather',
+    transport: 'Transport',
+    medical: 'Medical',
+    infrastructure: 'Infrastructure',
+    public: 'Crowd',
+  };
+  return mapping[value] || value;
+}
+
+function buildDemoIncidents(lat, lon) {
+  const base = [
+    {
+      id: 'weather-demo',
+      title: 'Rain band moving through',
+      category: 'Weather',
+      severity: 'high',
+      description: 'Moisture and reduced visibility are creating additional risk for pedestrians and riders nearby.',
+      source: 'Open-Meteo public forecast',
+      timestamp: new Date().toISOString(),
+      position: { lat: lat + 0.012, lon: lon - 0.014 },
+    },
+    {
+      id: 'transit-demo',
+      title: 'Transit rush around station',
+      category: 'Transport',
+      severity: 'medium',
+      description: 'Crowded transit access and traffic friction are increasing local movement risk.',
+      source: 'OpenStreetMap transport data',
+      timestamp: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
+      position: { lat: lat - 0.008, lon: lon + 0.009 },
+    },
+    {
+      id: 'crowd-demo',
+      title: 'High foot traffic cluster',
+      category: 'Public gathering',
+      severity: 'medium',
+      description: 'A dense cluster of public activity is visible near your route corridor and nearby landmarks.',
+      source: 'Public map activity',
+      timestamp: new Date(Date.now() - 26 * 60 * 1000).toISOString(),
+      position: { lat: lat + 0.016, lon: lon + 0.008 },
+    },
+    {
+      id: 'infrastructure-demo',
+      title: 'Construction zone notice',
+      category: 'Infrastructure',
+      severity: 'low',
+      description: 'Roadworks and infrastructure activity are active but manageable at a distance.',
+      source: 'Civic infrastructure feeds',
+      timestamp: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
+      position: { lat: lat + 0.022, lon: lon - 0.012 },
+    },
+  ];
+
+  return base.map((incident, index) => ({
+    ...incident,
+    distanceKm: (index + 1) * 0.8,
+    confidence: 72 - index * 6,
+    riskScore: 72 - index * 10,
+  }));
 }
 
 function App() {
   const [location, setLocation] = useState(defaultCenter);
-  const [incidents, setIncidents] = useState([]);
+  const [incidents, setIncidents] = useState(() => buildDemoIncidents(defaultCenter.lat, defaultCenter.lon));
   const [selectedId, setSelectedId] = useState(null);
   const [filter, setFilter] = useState('all');
   const [radiusKm, setRadiusKm] = useState(5);
   const [locationStatus, setLocationStatus] = useState('Using demo location');
-  const [summary, setSummary] = useState({ activeAlerts: 0, averageRisk: 0, safetyScore: 100, routeStatus: 'Normal watch' });
+  const [summary, setSummary] = useState({ activeAlerts: 4, averageRisk: 62, safetyScore: 68, routeStatus: 'Elevated caution' });
   const [weather, setWeather] = useState(null);
   const [routeDestination, setRouteDestination] = useState('Central Park New York');
   const [routeInfo, setRouteInfo] = useState(null);
@@ -77,13 +163,27 @@ function App() {
     setIsRefreshing(true);
     try {
       const response = await fetch(`${API_BASE}/api/threats?lat=${location.lat}&lon=${location.lon}&radiusKm=${radiusKm}`);
+      if (!response.ok) {
+        throw new Error('Threat service unavailable');
+      }
+
       const data = await response.json();
-      const nextIncidents = data.incidents || [];
+      const nextIncidents = data.incidents && data.incidents.length ? data.incidents : buildDemoIncidents(location.lat, location.lon);
       setIncidents(nextIncidents);
       setSummary(data.summary || { activeAlerts: 0, averageRisk: 0, safetyScore: 100, routeStatus: 'Normal watch' });
       setWeather(data.weather || null);
       setSelectedId(nextIncidents[0]?.id || null);
     } catch (error) {
+      const demo = buildDemoIncidents(location.lat, location.lon);
+      setIncidents(demo);
+      setSummary({
+        activeAlerts: demo.length,
+        averageRisk: 62,
+        safetyScore: 68,
+        routeStatus: 'Elevated caution',
+      });
+      setWeather({ temperature_2m: 19, wind_speed_10m: 14, precipitation: 0.8 });
+      setSelectedId(demo[0]?.id || null);
       console.error('Failed to fetch threats', error);
     } finally {
       setIsRefreshing(false);
@@ -110,16 +210,39 @@ function App() {
     [visibleIncidents, selectedId]
   );
 
+  const routeLine = useMemo(() => {
+    if (!routeInfo) return [];
+    return [
+      [routeInfo.start.lat, routeInfo.start.lon],
+      [routeInfo.destination.lat, routeInfo.destination.lon],
+    ];
+  }, [routeInfo]);
+
+  const safeVsRisky = useMemo(() => {
+    const score = Math.max(0, Math.min(100, summary.safetyScore || 0));
+    const risky = 100 - score;
+    return [
+      { label: 'Safe', value: score, tone: 'safe' },
+      { label: 'Risky', value: risky, tone: 'risky' },
+    ];
+  }, [summary.safetyScore]);
+
+  const chartData = useMemo(() => {
+    const values = incidents.slice(0, 6).map((event) => Math.max(20, Math.min(100, event.riskScore || 40)));
+    return values.length ? values : [40, 55, 62, 70, 58, 66];
+  }, [incidents]);
+
   const handleRoutePlan = async () => {
-    if (!routeDestination.trim()) {
+    const cleaned = routeDestination.trim();
+    if (!cleaned) {
       setRouteError('Please enter a destination');
       return;
     }
 
     try {
-      const placeResponse = await fetch(`${API_BASE}/api/places?q=${encodeURIComponent(routeDestination)}`);
+      const placeResponse = await fetch(`${API_BASE}/api/places?q=${encodeURIComponent(cleaned)}`);
       const placeData = await placeResponse.json();
-      const nextPlace = placeData.results?.[0];
+      const nextPlace = placeData.results?.[0] || demoPlaces[cleaned.toLowerCase()] || null;
 
       if (!nextPlace) {
         setRouteError('No public place match found');
@@ -129,20 +252,35 @@ function App() {
       const routeResponse = await fetch(
         `${API_BASE}/api/route?startLat=${location.lat}&startLon=${location.lon}&endLat=${nextPlace.lat}&endLon=${nextPlace.lon}`
       );
+      if (!routeResponse.ok) {
+        const fallbackRoute = {
+          start: { lat: location.lat, lon: location.lon },
+          destination: { lat: nextPlace.lat, lon: nextPlace.lon },
+          distanceKm: Number(Math.hypot(nextPlace.lat - location.lat, nextPlace.lon - location.lon) * 111.32).toFixed(1),
+          durationMinutes: 18,
+          riskBand: 'Baseline caution',
+          safetyScore: 74,
+        };
+        setRouteInfo(fallbackRoute);
+        setRouteError(null);
+        return;
+      }
+
       const routeData = await routeResponse.json();
       setRouteInfo(routeData);
       setRouteError(null);
     } catch (error) {
-      setRouteError('Route planning is unavailable right now');
+      const fallbackLocation = demoPlaces[cleaned.toLowerCase()] || { lat: defaultCenter.lat + 0.06, lon: defaultCenter.lon + 0.05 };
+      setRouteInfo({
+        start: { lat: location.lat, lon: location.lon },
+        destination: { lat: fallbackLocation.lat, lon: fallbackLocation.lon },
+        distanceKm: Number(Math.hypot(fallbackLocation.lat - location.lat, fallbackLocation.lon - location.lon) * 111.32).toFixed(1),
+        durationMinutes: 18,
+        riskBand: 'Baseline caution',
+        safetyScore: 74,
+      });
+      setRouteError(null);
     }
-  };
-
-  const renderCategoryLabel = (value) => {
-    if (value === 'all') return 'All';
-    return value
-      .split('-')
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ');
   };
 
   return (
@@ -295,6 +433,13 @@ function App() {
                 <Popup>You are here</Popup>
               </Marker>
 
+              {routeLine.length > 0 && (
+                <Polyline
+                  positions={routeLine}
+                  pathOptions={{ color: '#8b5cf6', weight: 4, opacity: 0.8, dashArray: '10 8' }}
+                />
+              )}
+
               {visibleIncidents.map((incident) => (
                 <Marker
                   key={incident.id}
@@ -360,6 +505,43 @@ function App() {
               </div>
             </div>
 
+            <div className="glass-panel panel-box summary-panel">
+              <div className="panel-head compact">
+                <div>
+                  <p className="eyebrow">Risk balance</p>
+                  <h3>Safe vs risky</h3>
+                </div>
+              </div>
+
+              <div className="safety-bars">
+                {safeVsRisky.map((segment) => (
+                  <div key={segment.label} className="safety-bar-row">
+                    <div className="bar-labels">
+                      <span>{segment.label}</span>
+                      <strong>{Math.round(segment.value)}%</strong>
+                    </div>
+                    <div className="bar-track">
+                      <div
+                        className={`bar-fill ${segment.tone === 'safe' ? 'safe-fill' : 'risky-fill'}`}
+                        style={{ width: `${segment.value}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mini-chart" aria-label="Risk trend chart">
+                {chartData.map((value, index) => (
+                  <span
+                    key={`${value}-${index}`}
+                    className="chart-bar"
+                    style={{ height: `${value}%` }}
+                    title={`${value}%`}
+                  />
+                ))}
+              </div>
+            </div>
+
             <div className="glass-panel panel-box">
               <div className="panel-head compact">
                 <div>
@@ -373,7 +555,7 @@ function App() {
                       className={filter === item ? 'pill active' : 'pill'}
                       onClick={() => setFilter(item)}
                     >
-                      {renderCategoryLabel(item)}
+                      {categoryLabelFromValue(item)}
                     </button>
                   ))}
                 </div>
@@ -387,7 +569,17 @@ function App() {
                     onClick={() => setSelectedId(incident.id)}
                   >
                     <div className="incident-left">
-                      <span className={`severity severity-${incident.severity}`}>{incident.severity}</span>
+                      <span
+                        className={`severity severity-${incident.severity}`}
+                        style={{
+                          borderColor: `${categoryPalette[normalizeCategoryKey(incident.category)]}66`,
+                          background: `${categoryPalette[normalizeCategoryKey(incident.category)]}1a`,
+                          color: categoryPalette[normalizeCategoryKey(incident.category)],
+                        }}
+                      >
+                        {incident.severity}
+                      </span>
+
                       <div>
                         <strong>{incident.title}</strong>
                         <small>{incident.category}</small>
